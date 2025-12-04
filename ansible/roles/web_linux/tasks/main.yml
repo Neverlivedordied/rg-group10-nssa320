@@ -1,0 +1,18 @@
+---
+- name: Install Apache
+  become: true
+  ansible.builtin.yum:
+    name: httpd
+    state: present
+- name: Start and enable Apache
+  become: true
+  ansible.builtin.service:
+    name: httpd
+    state: started
+    enabled: true
+- name: Deploy homepage
+  become: true
+  ansible.builtin.copy:
+    dest: /var/www/html/index.html
+    content: "Hello from Rocky Linux!"
+    mode: '0644'

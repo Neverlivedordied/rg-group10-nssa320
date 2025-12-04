@@ -1,0 +1,12 @@
+---
+- name: Ensure Windows Time service (w32time) is running
+  ansible.windows.win_service:
+    name: w32time
+    state: started
+    start_mode: auto
+
+- name: Create a simple index.html file
+  ansible.windows.win_copy:
+    dest: C:\temp\index.html
+    content: "Hello from Windows Server! Ansible is working."
+    mode: '0644'

@@ -1,0 +1,9 @@
+---
+- name: Install Apache on Rocky Linux
+  hosts: rocky
+  roles:
+    - web_linux
+- name: Install IIS on Windows
+  hosts: windows
+  roles:
+    - web_windows
