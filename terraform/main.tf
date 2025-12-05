@@ -5,11 +5,19 @@ terraform {
       version = "~> 4.54.0"
     }
   }
+
+  backend "azurerm" {
+    resource_group_name  = "tfstate-rg"
+    storage_account_name = "group10tfstate" # Must match what you created in Azure
+    container_name       = "tfstate"
+    key                  = "terraform.tfstate"
+  }
+
 }
 
 provider "azurerm" {
-features {}
-subscription_id = "d39d9dd0-33ba-4290-96ae-969b8c9fe4f0"
+  features {}
+  subscription_id = "d39d9dd0-33ba-4290-96ae-969b8c9fe4f0"
 }
 
 # --- 1. Resource Group ---
@@ -110,18 +118,18 @@ resource "azurerm_network_interface" "windows_nic" {
 
 # --- 4. Virtual Machines ---
 resource "azurerm_linux_virtual_machine" "linux_vm" {
-  name                = "rocky-linux-vm"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
-  size                = "Standard_B1s"
-  admin_username      = "azureuser"
+  name                  = "rocky-linux-vm"
+  resource_group_name   = azurerm_resource_group.rg.name
+  location              = azurerm_resource_group.rg.location
+  size                  = "Standard_B1s"
+  admin_username        = "azureuser"
   network_interface_ids = [azurerm_network_interface.linux_nic.id]
 
-plan {
-	name	="9-base"
-	product	="rockylinux-x86_64"
-	publisher	="resf"
-}
+  plan {
+    name      = "9-base"
+    product   = "rockylinux-x86_64"
+    publisher = "resf"
+  }
 
 
   admin_ssh_key {
@@ -143,16 +151,16 @@ plan {
 }
 
 resource "azurerm_windows_virtual_machine" "windows_vm" {
-  name                = "win-server-vm"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
-  size                = "Standard_B2ms"
-  admin_username      = "azureuser"
-  admin_password      = var.admin_password
+  name                  = "win-server-vm"
+  resource_group_name   = azurerm_resource_group.rg.name
+  location              = azurerm_resource_group.rg.location
+  size                  = "Standard_B2ms"
+  admin_username        = "azureuser"
+  admin_password        = var.admin_password
   network_interface_ids = [azurerm_network_interface.windows_nic.id]
 
 
-custom_data = base64encode(<<-WINSETUP
+  custom_data = base64encode(<<-WINSETUP
 	<powershell>
 	$url = "https://raw.githubusercontent.com/ansible/ansible-documentation/devel/examples/scripts/ConfigureRemotingForAnsible.ps1"
 
@@ -162,7 +170,7 @@ powershell.exe -ExecutionPolicy ByPass -File $file
 </powershell>
 WINSETUP
 
-)
+  )
 
   os_disk {
     caching              = "ReadWrite"

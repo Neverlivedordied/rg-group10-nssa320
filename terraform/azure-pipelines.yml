@@ -1,0 +1,126 @@
+trigger:
+  - master # Runs automatically when you push code
+
+
+# STRETCH GOAL: Schedule for Drift Detection
+# Runs every night at midnight to fix any configuration drift
+schedules:
+  - cron: "0 0 * * *"
+    displayName: Daily Drift Check
+    branches:
+      include:
+        - master
+    always: true
+
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+
+# Load secrets from Azure DevOps Library
+variables:
+  - group: 'Group10-Variables'
+
+
+stages:
+  # --- STAGE 1: LINT & VALIDATE ---
+  - stage: Validate
+    displayName: "Lint & Validate"
+    jobs:
+      - job: Lint
+        steps:
+          - script: |
+              terraform init -backend=false
+              terraform validate
+            displayName: "Terraform Validate"
+         
+          - script: |
+              pip install ansible-lint
+              ansible-lint ansible/site.yml
+            displayName: "Ansible Lint"
+            continueOnError: true # Don't stop the pipeline for minor lint warnings
+
+
+  # --- STAGE 2: INFRASTRUCTURE (TERRAFORM) ---
+  - stage: Infrastructure
+    displayName: "Terraform Plan & Apply"
+    jobs:
+      - job: Terraform
+        steps:
+          - task: TerraformInstaller@0
+            inputs:
+              terraformVersion: 'latest'
+         
+          # Initialize Terraform (Connects to the Azure Storage Backend)
+          - task: TerraformTaskV4@4
+            displayName: "Terraform Init"
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              backendServiceArm: 'Azure-Connection-Name' # MUST match your ADO Service Connection
+              backendAzureRmResourceGroupName: 'tfstate-rg'
+              backendAzureRmStorageAccountName: 'group10tfstate'
+              backendAzureRmContainerName: 'tfstate'
+              backendAzureRmKey: 'terraform.tfstate'
+
+
+          # Apply Infrastructure (Builds/Updates VMs)
+          - task: TerraformTaskV4@4
+            displayName: "Terraform Apply"
+            inputs:
+              provider: 'azurerm'
+              command: 'apply'
+              # We inject the secure Windows password here so it's never in the code
+              commandOptions: '-auto-approve -var="admin_password=$(WindowsPassword)"'
+              environmentServiceNameAzureRM: 'Azure-Connection-Name'
+
+
+  # --- STAGE 3: CONFIGURATION (ANSIBLE) ---
+  - stage: Configuration
+    displayName: "Ansible Configuration"
+    dependsOn: Infrastructure
+    jobs:
+      - job: Ansible
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '3.x'
+
+
+          # Install Ansible and the Azure Collection for Dynamic Inventory
+          - script: |
+              pip install ansible[azure]
+              ansible-galaxy collection install azure.azcollection
+              pip install -r ~/.ansible/collections/ansible_collections/azure/azcollection/requirements-azure.txt
+            displayName: "Install Ansible Requirements"
+
+
+          # Download the SSH Key from ADO Secure Files
+          - task: DownloadSecureFile@1
+            name: sshKey
+            inputs:
+              secureFile: 'id_rsa'
+
+
+          # Setup Secrets: Fix key permissions and create the Vault password file
+          - script: |
+              chmod 600 $(sshKey.secureFilePath)
+              echo "$(VaultPassword)" > .vault_pass
+            displayName: "Setup Secrets"
+
+
+          # Run the Playbook using AzureCLI task
+          # (This task handles the Azure login automatically so Dynamic Inventory works)
+          - task: AzureCLI@2
+            displayName: "Run Ansible Playbook"
+            inputs:
+              azureSubscription: 'Azure-Connection-Name'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                ansible-playbook -i ansible/inventory_azure_rm.yml ansible/site.yml \
+                  --private-key $(sshKey.secureFilePath) \
+                  --vault-password-file .vault_pass \
+                  --extra-vars "ansible_user=azureuser"
+
+

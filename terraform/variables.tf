@@ -14,7 +14,7 @@ variable "admin_password" {
   description = "Password for the Windows VM"
   type        = string
   sensitive   = true
-  default = "Student1!Student1!" 
+  default     = "group_vars/azure_windows.yml"
 }
 
 
